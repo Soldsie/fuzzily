@@ -15,12 +15,12 @@ module Fuzzily
     private
 
     def _update_fuzzy!(_o)
-      self.send(_o.trigram_association).delete_all
       String.new(self.send(_o.field)).scored_trigrams.each do |trigram, score|
         self.send(_o.trigram_association).build.tap do |record|
           record.score       = score
           record.trigram     = trigram
           record.fuzzy_field = _o.field.to_s
+          record.store_id = self.store_id
           record.save!
         end
       end
@@ -40,15 +40,16 @@ module Fuzzily
       private
 
       def _find_by_fuzzy(_o, pattern, options={})
-        options[:limit] ||= 10 unless options.has_key? :limit
+        options[:limit] ||= 10
         options[:offset] ||= 0
+        store_id = options[:store_id]
 
         trigrams = _o.trigram_class_name.constantize.
           limit(options[:limit]).
           offset(options[:offset]).
           for_model(self.name).
           for_field(_o.field.to_s).
-          matches_for(pattern)
+          matches_for(pattern, store_id)
         records = _load_for_ids(trigrams.map(&:owner_id))
         # order records as per trigram query (no portable way to do this in SQL)
         trigrams.map { |t| records[t.owner_id] }
@@ -70,16 +71,18 @@ module Fuzzily
         _with_included_trigrams(_o).find_in_batches(:batch_size => 100) do |batch|
           inserts = []
           batch.each do |record|
-            data = Fuzzily::String.new(record.send(_o.field))
-            data.scored_trigrams.each do |trigram, score|
-              inserts << sanitize_sql_array(['(?,?,?,?,?)', self.name, record.id, _o.field.to_s, score, trigram])
+            if record.deleted_at.nil?
+              data = Fuzzily::String.new(record.send(_o.field))
+              data.scored_trigrams.each do |trigram, score|
+                inserts << sanitize_sql_array(['(?,?,?,?,?,?)', self.name, record.id, _o.field.to_s, score, trigram, record.store_id])
+              end
             end
           end
 
           # take care of quoting
           c = trigram_class.connection
           insert_sql = %Q{
-            INSERT INTO %s (%s, %s, %s, %s, %s)
+            INSERT INTO %s (%s, %s, %s, %s, %s, %s)
             VALUES
           } % [
             c.quote_table_name(trigram_class.table_name),
@@ -87,7 +90,8 @@ module Fuzzily
             c.quote_column_name('owner_id'),
             c.quote_column_name('fuzzy_field'),
             c.quote_column_name('score'),
-            c.quote_column_name('trigram')
+            c.quote_column_name('trigram'),
+            c.quote_column_name('store_id')
           ]
 
           trigram_class.transaction do

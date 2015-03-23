@@ -25,6 +25,7 @@ module Fuzzily
             t.string  :trigram, :limit => 3
             t.integer :score,   :limit => 2
             t.send trigrams_owner_id_column_type, :owner_id
+            t.integer :store_id
             t.string  :owner_type
             t.string  :fuzzy_field
           end

@@ -23,8 +23,8 @@ module Fuzzily
     end
 
     module ClassMethods
-      def matches_for(text)
-        _matches_for_trigrams Fuzzily::String.new(text).trigrams
+      def matches_for(text, store_id=nil)
+        _matches_for_trigrams(Fuzzily::String.new(text).trigrams, store_id)
       end
 
       private
@@ -53,12 +53,21 @@ module Fuzzily
       end
 
       module Rails3
-        def _matches_for_trigrams(trigrams)
-          self.
-            select('owner_id, owner_type, count(*) AS matches, MAX(score) AS score').
-            group('owner_id, owner_type').
-            order('matches DESC, score ASC').
-            with_trigram(trigrams)
+        def _matches_for_trigrams(trigrams, store_id=nil)
+          if store_id
+            self.
+              where(store_id: store_id).
+              select('owner_id, owner_type, count(*) AS matches, MAX(score) AS score').
+              group('owner_id, owner_type').
+              order('matches DESC, score ASC').
+              with_trigram(trigrams)
+          else
+            self.
+              select('owner_id, owner_type, count(*) AS matches, MAX(score) AS score').
+              group('owner_id, owner_type').
+              order('matches DESC, score ASC').
+              with_trigram(trigrams)
+          end
         end
 
         def _add_fuzzy_scopes
