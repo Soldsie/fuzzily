@@ -15,7 +15,6 @@ module Fuzzily
     private
 
     def _update_fuzzy!(_o)
-      self.send(_o.trigram_association).delete_all
       String.new(self.send(_o.field)).scored_trigrams.each do |trigram, score|
         self.send(_o.trigram_association).build.tap do |record|
           record.score       = score
