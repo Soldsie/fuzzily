@@ -15,6 +15,7 @@ module Fuzzily
     private
 
     def _update_fuzzy!(_o)
+      self.send(_o.trigram_association).delete_all
       String.new(self.send(_o.field)).scored_trigrams.each do |trigram, score|
         self.send(_o.trigram_association).build.tap do |record|
           record.score       = score
@@ -40,7 +41,7 @@ module Fuzzily
       private
 
       def _find_by_fuzzy(_o, pattern, options={})
-        options[:limit] ||= 10
+        options[:limit] ||= 10 unless options.has_key? :limit
         options[:offset] ||= 0
         store_id = options[:store_id]
 
